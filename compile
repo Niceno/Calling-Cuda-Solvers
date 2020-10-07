@@ -1,0 +1,1 @@
+nvfortran -o CCS -i8 -r8 -L/usr/local/cuda/lib64 Main_Square.f90 -lcudart -lcublas -lcusparse -lcusolver
