@@ -41,17 +41,17 @@
 
   ! Matrix definition & host CPU storage variables
   integer(c_int)       :: m, n, lda, ldb
-  real, allocatable    :: A(:,:)
-  real, allocatable    :: B(:)
-  real, allocatable    :: X(:)
-  integer, allocatable :: Ipiv(:)
-  integer, target      :: Lwork
+  real, allocatable    :: a(:,:)   ! square matrix
+  real, allocatable    :: b(:)     ! right hand side vector
+  real, allocatable    :: x(:)     ! solution vector
+  integer, allocatable :: piv(:)   ! host copy of pivoting sequence
+  integer, target      :: Lwork    ! size of workspace
 
   ! CPU equivalents of device variables
   integer devInfo
-  integer(c_int) nrhs
+  integer(c_int) nrhs              ! number of right hand sides?
 
-  integer*8 Ipiv_size, devInfo_size, Lwork_size
+  integer*8 devInfo_size, Lwork_size
   integer*8 Workspace
 
   ! Handle to device
@@ -61,9 +61,9 @@
   type(c_ptr) :: pnt_a_gpu
   type(c_ptr) :: pnt_b_gpu
   type(c_ptr) :: d_Lwork
-  type(c_ptr) :: d_WS
-  type(c_ptr) :: d_Ipiv
-  type(c_ptr) :: d_devInfo
+  type(c_ptr) :: pnt_ws_gpu
+  type(c_ptr) :: pnt_piv_gpu
+  type(c_ptr) :: pnt_devinfo_gpu
 
   ! Function result variables
   integer*8 :: error
@@ -72,16 +72,12 @@
   type(c_ptr) :: pnt_a_cpu
   type(c_ptr) :: pnt_b_cpu
   type(c_ptr) :: pnt_x_cpu
-  type(c_ptr) :: CPU_Lwork_ptr
+  type(c_ptr) :: pnt_lwork_cpu
 
-  target :: A, B, X, Ipiv
+  target :: a, b, x, piv
 
   type(c_ptr)          :: cpfre,cptot
   integer*8, target    :: free,total
-  integer*8, parameter :: CUDA_MEM_CPY_DEVICE_TO_HOST = 2
-  integer*8, parameter :: CUDA_MEM_CPY_HOST_TO_DEVICE = 1
-  integer*4, parameter :: CUBLAS_OP_N = 0
-  integer*4, parameter :: CUBLAS_OP_T = 1
 
   ! ================================================
   free  = 0
@@ -91,8 +87,8 @@
 
   error = Cuda_Mem_Get_Info(cpfre,cptot)
   call Error_Check("Cuda_Mem_Get_Info", error)
-  write (*, '(A, I12)') "  free mem: ", free
-  write (*, '(A, I12)') " total mem: ", total
+  write (*, '(a, i12)') "  free mem: ", free
+  write (*, '(a, i12)') " total mem: ", total
 
   lda  = 3
   ldb  = 3
@@ -103,12 +99,10 @@
   allocate(A(lda,n))
   allocate(B(n))
   allocate(X(n))
-  allocate(Ipiv(lda))
+  allocate(piv(lda))
 !  allocate(Lwork)
 
-  Ipiv_size    = sizeof(Ipiv)
   devInfo_size = sizeof(devInfo)
-  Lwork_size   = sizeof(Lwork)
 
   !--------------------------------------------!
   !   Example from cusolver_library.pdf        !
@@ -132,7 +126,7 @@
   pnt_a_cpu     = c_loc(A)
   pnt_b_cpu     = c_loc(B)
   pnt_x_cpu     = c_loc(X)
-  CPU_Lwork_ptr = c_loc(Lwork)
+  pnt_lwork_cpu = c_loc(Lwork)
 
   !-----------------------------------!
   !   Step 1: Create cudense handle   !
@@ -150,13 +144,13 @@
   call Error_Check("Cuda_Malloc 2", error)
 
   ! Also allocate space for other device based variables
-  error = Cuda_Malloc(d_Ipiv, Ipiv_size)
+  error = Cuda_Malloc(pnt_piv_gpu, sizeof(piv))
   call Error_Check("Cuda_Malloc 3", error)
 
-  error = Cuda_Malloc(d_devInfo, devInfo_size)
+  error = Cuda_Malloc(pnt_devinfo_gpu, devInfo_size)
   call Error_Check("Cuda_Malloc 4", error)
 
-  error = Cuda_Malloc(d_Lwork, Lwork_size)
+  error = Cuda_Malloc(d_Lwork, sizeof(Lwork))
   call Error_Check("Cuda_Malloc 5", error)
 
   ! Copy A and B to device
@@ -176,7 +170,12 @@
   !   Step 3: query working space of Sgetrf (and allocate memory on device)   !
   !---------------------------------------------------------------------------!
   Lwork = 5
-  error = Cu_Solver_Dn_Dgetrf_Buffer_Size(cusolver_Hndl, m, n, pnt_a_gpu, lda, CPU_Lwork_ptr)
+  error = Cu_Solver_Dn_Dgetrf_Buffer_Size(cusolver_Hndl,  &
+                                          m,              &
+                                          n,              &
+                                          pnt_a_gpu,      &
+                                          lda,            &
+                                          pnt_lwork_cpu)
   call Error_Check("Cu_Solver_Dn_Dgetrf_Buffer_Size", error)
 
   write (*,*)
@@ -184,19 +183,35 @@
   write (*,*)
 
   Workspace = 4 * Lwork
-  error = Cuda_Malloc(d_WS, Workspace)
+  error = Cuda_Malloc(pnt_ws_gpu, Workspace)
   call Error_Check("Cuda_Malloc 6", error)
 
   !---------------------------------------------!
   !   Step 4: compute LU factorization of [A]   !
   !---------------------------------------------!
-  error = Cu_Solver_Dn_Dgetrf(cusolver_Hndl, m, n, pnt_a_gpu, lda, d_WS, d_Ipiv, d_devInfo) 
+  error = Cu_Solver_Dn_Dgetrf(cusolver_Hndl,    &
+                              m,                &
+                              n,                &
+                              pnt_a_gpu,        &
+                              lda,              &
+                              pnt_ws_gpu,       &
+                              pnt_piv_gpu,      &
+                              pnt_devinfo_gpu)
   call Error_Check("Cu_Solver_Dn_Dgetrf", error)
 
   !-----------------------------------------------------------------!
   !   Step 5: compute solution vector [X] for right hand side [B]   !
   !-----------------------------------------------------------------!
-  error = Cu_Solver_Dn_Dgetrs(cusolver_Hndl, CUBLAS_OP_N, n, nrhs, pnt_a_gpu, lda, d_Ipiv, pnt_b_gpu, ldb, d_devInfo)
+  error = Cu_Solver_Dn_Dgetrs(cusolver_Hndl,    &
+                              CUBLAS_OP_N,      &
+                              n,                &
+                              nrhs,             &
+                              pnt_a_gpu,        &
+                              lda,              &
+                              pnt_piv_gpu,      &
+                              pnt_b_gpu,        &
+                              ldb,              &
+                              pnt_devinfo_gpu)
   call Error_Check("Cu_Solver_Dn_Dgetrs", error)
 
   !------------------------------------------------!
@@ -219,8 +234,8 @@
   !------------------------------------------------------------------!
   error = Cuda_Free(pnt_a_gpu)
   error = Cuda_Free(pnt_b_gpu)
-  error = Cuda_Free(d_Ipiv)
-  error = Cuda_Free(d_WS)
+  error = Cuda_Free(pnt_piv_gpu)
+  error = Cuda_Free(pnt_ws_gpu)
   error = Cuda_Free(d_Lwork)
 
   error = Cu_Solver_Dn_Destroy(cusolver_Hndl)
@@ -228,9 +243,9 @@
   !---------------------------------------------------!
   !   Step 8: deallocate memory on host before exit   !
   !---------------------------------------------------!
-  deallocate(A)
-  deallocate(B)
-  deallocate(X)
-  deallocate(Ipiv)
+  deallocate(a)
+  deallocate(b)
+  deallocate(x)
+  deallocate(piv)
 
   end program
