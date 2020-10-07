@@ -12,17 +12,15 @@
 
   ! Matrix definition & host CPU storage variables
   integer(c_int)       :: m, n, lda, ldb
-  real, allocatable    :: a(:,:)   ! square matrix
-  real, allocatable    :: b(:)     ! right hand side vector
-  real, allocatable    :: x(:)     ! solution vector
+  real,    allocatable :: a(:,:)   ! square matrix
+  real,    allocatable :: b(:)     ! right hand side vector
+  real,    allocatable :: x(:)     ! solution vector
   integer, allocatable :: piv(:)   ! host copy of pivoting sequence
   integer, target      :: lwork    ! size of workspace
 
   ! CPU equivalents of device variables
   integer        :: devinfo
   integer(c_int) :: nrhs           ! number of right hand sides?
-
-  integer :: Workspace
 
   ! Handle to device
   type(c_ptr) :: cusolver_hndl
@@ -71,7 +69,7 @@
   !   Example from cusolver_library.pdf        !
   !   "QR factorization dense linear solver"   !
   !                                            !
-  !   DeFINE [A] AND [B]                       !
+  !   Define [A] and [B]                       !
   !                                            !
   !           [A]         [x]  =    [B]        !
   !    | 1.0  2.0  3.0 | |1.0|    | 6.0|       !
@@ -93,12 +91,12 @@
   call Error_Check("Cu_Solver_Dn_Create", error)
 
   !------------------------------------!
-  !   Step 2: copy a and b to Device   !
+  !   Step 2: copy a and b to device   !
   !------------------------------------!
-  error = Cuda_Malloc(pnt_a_gpu, sizeof(A))
+  error = Cuda_Malloc(pnt_a_gpu, sizeof(a))
   call Error_Check("Cuda_Malloc 1", error)
 
-  error = Cuda_Malloc(pnt_b_gpu, sizeof(B))
+  error = Cuda_Malloc(pnt_b_gpu, sizeof(b))
   call Error_Check("Cuda_Malloc 2", error)
 
   ! Also allocate space for other device based variables
@@ -108,10 +106,10 @@
   error = Cuda_Malloc(pnt_devinfo_gpu, sizeof(devinfo))
   call Error_Check("Cuda_Malloc 4", error)
 
-  error = Cuda_Malloc(pnt_lwork_gpu, sizeof(Lwork))
+  error = Cuda_Malloc(pnt_lwork_gpu, sizeof(lwork))
   call Error_Check("Cuda_Malloc 5", error)
 
-  ! Copy A and B to device
+  ! Copy a and b to device
   error = Cuda_Mem_Cpy(pnt_a_gpu,  &                 ! target
                        c_loc(a),   &                 ! source
                        sizeof(a),  &                 ! size
@@ -127,7 +125,7 @@
   !---------------------------------------------------------------------------!
   !   Step 3: query working space of Dgetrf (and allocate memory on device)   !
   !---------------------------------------------------------------------------!
-  Lwork = 5
+  lwork = 5
   error = Cu_Solver_Dn_Dgetrf_Buffer_Size(cusolver_hndl,  &
                                           m,              &
                                           n,              &
@@ -137,11 +135,10 @@
   call Error_Check("Cu_Solver_Dn_Dgetrf_Buffer_Size", error)
 
   write (*,*)
-  write (*, '(A, I12)') " Lwork: ", Lwork
+  write (*, '(a, i12)') " lwork: ", lwork
   write (*,*)
 
-  Workspace = 4 * Lwork
-  error = Cuda_Malloc(pnt_ws_gpu, Workspace)
+  error = Cuda_Malloc(pnt_ws_gpu, 4 * lwork)  ! why 4 * lwork?
   call Error_Check("Cuda_Malloc 6", error)
 
   !---------------------------------------------!
@@ -178,7 +175,7 @@
   !------------------------------------------------!
   error = Cuda_Mem_Cpy(c_loc(x),  &                  ! target
                        pnt_b_gpu,  &                 ! source
-                       sizeof(B),  &                 ! size
+                       sizeof(b),  &                 ! size
                        CUDA_MEM_CPY_DEVICE_TO_HOST)  ! operation
   call Error_Check("Cuda_Mem_Cpy 4", error)
 
