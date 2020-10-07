@@ -1,31 +1,4 @@
 !==============================================================================!
-!   Interface to cusolverDn and CUDA C functions                               !
-!                                                                              !
-!   Compile with:                                                              !
-!   nvfortran -i8 -L /usr/local/cuda/lib64 another.f90 \                       !
-!             -lcudart -lcublas -lcusparse -lcusolver                          !
-!------------------------------------------------------------------------------!
-  include 'Cuda_Solver_Mod.f90'
-
-!==============================================================================!
-  subroutine Error_Check(call_name, err)
-!------------------------------------------------------------------------------!
-  implicit none
-!------------------------------------------------------------------------------!
-  character(len=*) :: call_name
-  integer          :: err
-!------------------------------------------------------------------------------!
-
-  if(err .ne. 0) then
-    write (*,*)
-    write (*, '(a,a,i2)')  call_name, " error: ", err
-    write (*,*)
-    stop
-  end if
-
-  end subroutine
-
-!==============================================================================!
   program main
 !------------------------------------------------------------------------------!
 !   The purpose of this routine is to provide for GPU based solution of        !
@@ -65,24 +38,19 @@
   ! Function result variables
   integer :: error
 
-  ! Pointers to host CPU memory
-  type(c_ptr) :: pnt_a_cpu
-  type(c_ptr) :: pnt_b_cpu
-  type(c_ptr) :: pnt_x_cpu
-  type(c_ptr) :: pnt_lwork_cpu
-
+  ! Parts of the linear system
   target :: a, b, x, piv
 
-  type(c_ptr)     :: cpfre, cptot
+  ! Variables holding free and total memory
   integer, target :: free, total
 
-  ! ================================================
+  !-----------------------------------------------!
+  !   Check the amount of free and total memory   !
+  !-----------------------------------------------!
   free  = 0
   total = 0
-  cpfre = c_loc(free)
-  cptot = c_loc(total)
 
-  error = Cuda_Mem_Get_Info(cpfre,cptot)
+  error = Cuda_Mem_Get_Info(c_loc(free), c_loc(total))
   call Error_Check("Cuda_Mem_Get_Info", error)
   write (*, '(a, i12)') "  free mem: ", free
   write (*, '(a, i12)') " total mem: ", total
@@ -97,7 +65,7 @@
   allocate(b(n))
   allocate(x(n))
   allocate(piv(lda))
-!  allocate(lwork)
+! allocate(lwork)
 
   !--------------------------------------------!
   !   Example from cusolver_library.pdf        !
@@ -110,18 +78,13 @@
   !    | 4.0  5.0  6.0 | |1.0| =  |15.0|       !
   !    | 2.0  1.0  1.0 | |1.0|    | 4.0|       !
   !--------------------------------------------!
-  A(1,1) = 1.0;   A(1,2) = 2.0;  A(1,3) = 3.0
-  A(2,1) = 4.0;   A(2,2) = 5.0;  A(2,3) = 6.0
-  A(3,1) = 2.0;   A(3,2) = 1.0;  A(3,3) = 1.0
+  a(1,1) = 1.0;   a(1,2) = 2.0;   a(1,3) = 3.0
+  a(2,1) = 4.0;   a(2,2) = 5.0;   a(2,3) = 6.0
+  a(3,1) = 2.0;   a(3,2) = 1.0;   a(3,3) = 1.0
 
-  B(1) = 6.0
-  B(2) = 15.0
-  B(3) = 4.0
-
-  pnt_a_cpu     = c_loc(A)
-  pnt_b_cpu     = c_loc(B)
-  pnt_x_cpu     = c_loc(X)
-  pnt_lwork_cpu = c_loc(lwork)
+  b(1) =  6.0
+  b(2) = 15.0
+  b(3) =  4.0
 
   !-----------------------------------!
   !   Step 1: Create cudense handle   !
@@ -150,14 +113,14 @@
 
   ! Copy A and B to device
   error = Cuda_Mem_Cpy(pnt_a_gpu,  &                 ! target
-                       pnt_a_cpu,  &                 ! source
-                       sizeof(A),  &                 ! size
+                       c_loc(a),   &                 ! source
+                       sizeof(a),  &                 ! size
                        CUDA_MEM_CPY_HOST_TO_DEVICE)  ! operation
   call Error_Check("Cuda_Mem_Cpy 1", error)
 
   error = Cuda_Mem_Cpy(pnt_b_gpu,  &                 ! target
-                       pnt_b_cpu,  &                 ! source
-                       sizeof(B),  &                 ! size
+                       c_loc(b),   &                 ! source
+                       sizeof(b),  &                 ! size
                        CUDA_MEM_CPY_HOST_TO_DEVICE)  ! operation
   call Error_Check("Cuda_Mem_Cpy 2", error)
 
@@ -170,7 +133,7 @@
                                           n,              &
                                           pnt_a_gpu,      &
                                           lda,            &
-                                          pnt_lwork_cpu)
+                                          c_loc(lwork))
   call Error_Check("Cu_Solver_Dn_Dgetrf_Buffer_Size", error)
 
   write (*,*)
@@ -213,7 +176,7 @@
   !   Step 6: copy solution vector stored in [b]   !
   !           on device into [x] vector on host    !
   !------------------------------------------------!
-  error = Cuda_Mem_Cpy(pnt_x_cpu,  &                 ! target
+  error = Cuda_Mem_Cpy(c_loc(x),  &                  ! target
                        pnt_b_gpu,  &                 ! source
                        sizeof(B),  &                 ! size
                        CUDA_MEM_CPY_DEVICE_TO_HOST)  ! operation
