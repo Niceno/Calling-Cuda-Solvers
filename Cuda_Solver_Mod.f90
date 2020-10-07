@@ -84,33 +84,33 @@
     !   Cu_Solver_Dn_Create   !
     !-------------------------!
     integer(c_int) function  Cu_Solver_Dn_Create  &
-      (cusolver_Hndl)                             &
+      (cusolver_hndl)                             &
       bind(C, name = "cusolverDnCreate")
 
       use iso_c_binding
       implicit none
 
-      type(c_ptr) :: cusolver_Hndl
+      type(c_ptr) :: cusolver_hndl
     end function
 
     !--------------------------!
     !   Cu_Solver_Dn_Destroy   !
     !--------------------------!
     integer(c_int) function Cu_Solver_Dn_Destroy  &
-      (cusolver_Hndl)                             &
+      (cusolver_hndl)                             &
       bind(C, name = "cusolverDnDestroy")
 
       use iso_c_binding
       implicit none
 
-      type(c_ptr), value :: cusolver_Hndl
+      type(c_ptr), value :: cusolver_hndl
     end function
 
     !-------------------------------------!
     !   Cu_Solver_Dn_Dgetrf_Buffer_Size   !
     !-------------------------------------!
     integer(c_int) function Cu_Solver_Dn_Dgetrf_Buffer_Size  &
-     (cusolver_Hndl,                                         &
+     (cusolver_hndl,                                         &
       m,                                                     &
       n,                                                     &
       pnt_a_gpu,                                             &
@@ -121,7 +121,7 @@
       use iso_c_binding
       implicit none
 
-      type   (c_ptr), value :: cusolver_Hndl   ! CUDA solver handle
+      type   (c_ptr), value :: cusolver_hndl   ! CUDA solver handle
       integer(c_int), value :: m
       integer(c_int), value :: n
       type   (c_ptr), value :: pnt_a_gpu
@@ -133,7 +133,7 @@
     !   Cu_Solver_Dn_Dgetrf   !
     !-------------------------!
     integer(c_int) function Cu_Solver_Dn_Dgetrf  &
-     (cusolver_Hndl,                             &
+     (cusolver_hndl,                             &
       m,                                         &
       n,                                         &
       pnt_a_gpu,                                 &
@@ -146,7 +146,7 @@
       use iso_c_binding
       implicit none
 
-      type   (c_ptr), value :: cusolver_Hndl   ! CUDA solver handle
+      type   (c_ptr), value :: cusolver_hndl   ! CUDA solver handle
       integer(c_int), value :: m
       integer(c_int), value :: n
       type   (c_ptr), value :: pnt_a_gpu
@@ -160,7 +160,7 @@
     !   Cu_Solver_Dn_Dgetrs   !
     !-------------------------!
     integer(c_int) function Cu_Solver_Dn_Dgetrs  &
-     (cusolver_Hndl,                             &
+     (cusolver_hndl,                             &
       trans,                                     &
       n,                                         &
       nrhs,                                      &
@@ -175,7 +175,7 @@
       use iso_c_binding
       implicit none
 
-      type   (c_ptr), value :: cusolver_Hndl   ! CUDA solver handle
+      type   (c_ptr), value :: cusolver_hndl   ! CUDA solver handle
       integer(c_int), value :: trans
       integer(c_int), value :: n
       integer(c_int), value :: nrhs
